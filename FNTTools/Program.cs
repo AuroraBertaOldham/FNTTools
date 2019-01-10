@@ -2,9 +2,15 @@
 
 namespace FNTTools
 {
-    class Program
+    public class Program
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
+        {
+            Program program = new Program();
+            program.Run(args);
+        }
+
+        public void Run(string[] args)
         {
             Console.WriteLine("Hello World!");
         }

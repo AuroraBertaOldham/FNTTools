@@ -3,6 +3,11 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
+    <Authors>Todd Berta-Oldham</Authors>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpFNT" Version="1.1.0" />
+  </ItemGroup>
 
 </Project>
