@@ -1,13 +1,23 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
-    <Authors>Todd Berta-Oldham</Authors>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <Authors>Aurora Berta-Oldham</Authors>
+    <StartupObject>FNTTools.Program</StartupObject>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SharpFNT" Version="1.1.0" />
+    <PackageReference Include="SharpFNT" Version="2.0.0" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20253.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
