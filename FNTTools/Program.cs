@@ -24,7 +24,7 @@ namespace FNTTools
 
         public int Run(string[] args)
         {
-            var root = new RootCommand("Copyright (c) 2019-2020 Aurora Berta-Oldham")
+            var root = new RootCommand("This program is a tool for working with Angel Code bitmap fonts (.fnt).")
             {
                 CreateConvertCommand(),
                 CreateInspectCommand()
@@ -43,7 +43,7 @@ namespace FNTTools
 
             var sourceArgument = new Argument<string[]>("source", "The bitmap font(s) to convert.");
 
-            var convertCommand = new Command("convert", "Change the format used by a .fnt bitmap font into either binary, XML, or text.");
+            var convertCommand = new Command("convert", "Change the format used by a bitmap font into either binary, XML, or text.");
             convertCommand.AddArgument(formatArgument);
             convertCommand.AddArgument(sourceArgument);
             convertCommand.AddOption(outputOption);
@@ -122,16 +122,20 @@ namespace FNTTools
             var infoOption = new Option<bool>("--info", "Display the info block.");
             var commonOption = new Option<bool>("--common", "Display the common block.");
             var pagesOption = new Option<bool>("--pages", "Display the pages block.");
+            var pageOption = new Option<int[]>(new[] { "--page", "-p" }, "Display a specific page from the pages block.");
             var charactersOption = new Option<bool>("--characters", "Display the characters block.");
+            var characterOption = new Option<int[]>(new []{ "--character", "-c" }, "Display a specific character from the characters block.");
             var kerningPairsOption = new Option<bool>("--kerningpairs", "Display the kerning pairs block.");
 
-            var inspectCommand = new Command("inspect", "Inspects the properties of a .fnt bitmap font.");
+            var inspectCommand = new Command("inspect", "Inspects the properties of a bitmap font.");
             inspectCommand.AddArgument(sourceArgument);
             inspectCommand.AddOption(allOption);
             inspectCommand.AddOption(infoOption);
             inspectCommand.AddOption(commonOption);
             inspectCommand.AddOption(pagesOption);
+            inspectCommand.AddOption(pageOption);
             inspectCommand.AddOption(charactersOption);
+            inspectCommand.AddOption(characterOption);
             inspectCommand.AddOption(kerningPairsOption);
 
             inspectCommand.Handler = CommandHandler.Create<InspectArgs>(Inspect);
@@ -149,47 +153,86 @@ namespace FNTTools
 
             var bitmapFont = BitmapFont.FromFile(args.Source);
 
+            // If info or common blocks are missing just return a new instance to print default values.
+
             if (args.All || args.Info)
             {
                 args.Console.Out.WriteLine("Info Block:");
-                InspectObject(bitmapFont.Info, args.Console);
+                InspectObject(bitmapFont.Info ?? new BitmapFontInfo(), args.Console);
                 args.Console.Out.WriteLine();
             }
 
             if (args.All || args.Common)
             {
                 args.Console.Out.WriteLine("Common Block:");
-                InspectObject(bitmapFont.Common, args.Console);
+                InspectObject(bitmapFont.Common ?? new BitmapFontCommon(), args.Console);
                 args.Console.Out.WriteLine();
             }
 
             if (args.All || args.Pages)
             {
                 args.Console.Out.WriteLine("Pages Block:");
-                foreach (var (id, file) in bitmapFont.Pages)
-                { 
-                    args.Console.Out.WriteLine($"ID: {id}");
-                    args.Console.Out.WriteLine($"File: {file}");
-                    args.Console.Out.WriteLine();
+                if (bitmapFont.Pages != null)
+                {
+                    foreach (var (id, file) in bitmapFont.Pages)
+                    {
+                        InspectPage(id, file, args.Console);
+                    }
+                }
+
+                if (args.Page != null)
+                {
+                    foreach (var id in args.Page)
+                    {
+                        GetPageFileWithErrorMessage(id, bitmapFont, args.Console);
+                    }
+                }
+
+            }
+            else if (args.Page != null && args.Page.Length > 0)
+            {
+                args.Console.Out.WriteLine("Selected Pages:");
+                foreach (var id in args.Page)
+                {
+                    var file = GetPageFileWithErrorMessage(id, bitmapFont, args.Console);
+                    if (file != null)
+                    {
+                        InspectPage(id, file, args.Console);
+                    }
                 }
             }
 
             if (args.All || args.Characters)
             {
                 args.Console.Out.WriteLine("Characters Block:");
-                foreach (var (id, character) in bitmapFont.Characters)
+
+                if (bitmapFont.Characters != null)
                 {
-                    var characterID = (char)id;
-
-                    args.Console.Out.WriteLine($"ID: {id}");
-
-                    if (!char.IsControl(characterID) && !char.IsWhiteSpace(characterID))
+                    foreach (var (id, character) in bitmapFont.Characters)
                     {
-                        args.Console.Out.WriteLine($"Character: {characterID}");
+                        InspectCharacter(id, character, args.Console);
                     }
+                }
 
-                    InspectObject(character, args.Console);
-                    args.Console.Out.WriteLine();
+                if (args.Character != null)
+                {
+                    foreach (var id in args.Character)
+                    {
+                        GetCharacterWithErrorMessage(id, bitmapFont, args.Console);
+                    }
+                }
+            }
+            else if (args.Character != null && args.Character.Length > 0)
+            {
+                args.Console.Out.WriteLine("Selected Characters:");
+
+                foreach (var id in args.Character)
+                {
+                    var character = GetCharacterWithErrorMessage(id, bitmapFont, args.Console);
+                    if (character != null)
+                    {
+                        InspectCharacter(id, character, args.Console);
+                    }
                 }
             }
 
@@ -215,6 +258,52 @@ namespace FNTTools
             {
                 console.Out.WriteLine($"{propertyInfo.Name}: {propertyInfo.GetValue(value)}");
             }
+        }
+
+        private Character GetCharacterWithErrorMessage(int id, BitmapFont bitmapFont, IConsole console)
+        {
+            if (bitmapFont.Characters != null && bitmapFont.Characters.TryGetValue(id, out var character)) return character;
+            console.Out.WriteLine($"Character with the ID \"{id}\" does not exist. Skipping.");
+            console.Out.WriteLine();
+            return null;
+        }
+
+        private void InspectCharacter(int id, Character character, IConsole console)
+        {
+            var characterID = (char)id;
+
+            console.Out.WriteLine($"ID: {id}");
+
+            if (char.IsControl(characterID))
+            {
+                console.Out.WriteLine("Character Type: Control");
+            }
+            else if (char.IsWhiteSpace(characterID))
+            {
+                console.Out.WriteLine("Character Type: Whitespace");
+            }
+            else
+            {
+                console.Out.WriteLine($"Character: {characterID}");
+            }
+
+            InspectObject(character, console);
+            console.Out.WriteLine();
+        }
+
+        private string GetPageFileWithErrorMessage(int id, BitmapFont bitmapFont, IConsole console)
+        {
+            if (bitmapFont.Pages != null && bitmapFont.Pages.TryGetValue(id, out var file)) return file;
+            console.Out.WriteLine($"Page with the ID \"{id}\" does not exist. Skipping.");
+            console.Out.WriteLine();
+            return null;
+        }
+
+        private void InspectPage(int id, string file, IConsole console)
+        {
+            console.Out.WriteLine($"ID: {id}");
+            console.Out.WriteLine($"File: {file}");
+            console.Out.WriteLine();
         }
     }
 
@@ -247,7 +336,11 @@ namespace FNTTools
 
         public bool Pages { get; set; }
 
+        public int[] Page { get; set; }
+
         public bool Characters { get; set; }
+
+        public int[] Character { get; set; }
 
         public bool KerningPairs { get; set; }
 
