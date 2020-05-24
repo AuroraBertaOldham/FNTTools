@@ -6,6 +6,8 @@
     <Authors>Aurora Berta-Oldham</Authors>
     <StartupObject>FNTTools.Program</StartupObject>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <Copyright>Copyright © Aurora Berta-Oldham 2019-2020</Copyright>
+    <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 
   <ItemGroup>

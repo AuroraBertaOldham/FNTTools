@@ -4,6 +4,7 @@
 // This code is made available under the MIT License.                                              *
 //**************************************************************************************************
 
+using System;
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.IO;
@@ -36,18 +37,19 @@ namespace FNTTools
         private Command CreateConvertCommand()
         {
             var outputOption = new Option<string[]>(new[] { "--output", "-o" }, "The name and location of the output file(s).");
-            var forceOption = new Option<bool>(new[] { "--force", "-f" }, "Ignore most errors such as missing files.");
             var overwriteOption = new Option<bool>("--overwrite", "Allow existing files to be overwritten.");
 
             var formatArgument = new Argument<FormatHint>("format", "The format to convert to.");
-
-            var sourceArgument = new Argument<string[]>("source", "The bitmap font(s) to convert.");
+            var sourceArgument = new Argument<string[]>("source", "The bitmap font(s) to convert.")
+            {
+                Arity = new ArgumentArity(1, int.MaxValue)
+            };
 
             var convertCommand = new Command("convert", "Change the format used by a bitmap font into either binary, XML, or text.");
+
             convertCommand.AddArgument(formatArgument);
             convertCommand.AddArgument(sourceArgument);
             convertCommand.AddOption(outputOption);
-            convertCommand.AddOption(forceOption);
             convertCommand.AddOption(overwriteOption);
 
             convertCommand.Handler = CommandHandler.Create<ConvertArgs>(Convert);
@@ -57,61 +59,44 @@ namespace FNTTools
 
         public int Convert(ConvertArgs args)
         {
-            if (args.Source == null || args.Source.Length == 0)
-            {
-                args.Console.Out.WriteLine("No sources specified. Aborting.");
-                return 1;
-            }
-
-            if (args.Output != null && args.Output.Length != 0 && args.Output.Length != args.Source.Length)
-            {
-                args.Console.Out.WriteLine($"{args.Output.Length} out of {args.Source.Length} outputs specified. Aborting.");
-                return 1;
-            }
+            var result = 0;
 
             for (var i = 0; i < args.Source.Length; i++)
             {
                 var sourceFile = args.Source[i];
 
-                if (File.Exists(sourceFile))
+                try
                 {
-                    try
+                    if (!File.Exists(sourceFile))
                     {
-                        var bitmapFont = BitmapFont.FromFile(sourceFile);
-                        var outputFile = args.Output?.ElementAtOrDefault(i) ?? Path.GetFileName(sourceFile);
-
-                        if (File.Exists(outputFile) && !args.Overwrite)
-                        {
-                            if (args.Force)
-                            {
-                                args.Console.Out.WriteLine($"File \"{outputFile}\" already exists. Use \"--overwrite\" to allow existing files to be overwritten. Skipping.");
-                                continue;
-                            }
-
-                            args.Console.Out.WriteLine($"File \"{outputFile}\" already exists. Use \"--overwrite\" to allow existing files to be overwritten. Aborting.");
-                            return 1;
-                        }
-
-                        bitmapFont.Save(outputFile, args.Format);
+                        args.Console.Out.WriteLine($"Source file \"{sourceFile}\" does not exist. Skipping.");
+                        result = 1;
+                        continue;
                     }
-                    catch
+
+                    var outputFile = args.Output?.ElementAtOrDefault(i) ?? Path.GetFileName(sourceFile);
+
+                    if (!args.Overwrite && File.Exists(outputFile))
                     {
-                        args.Console.Out.WriteLine($"Failed to convert bitmap font \"{sourceFile}\".");
-
-                        if (!args.Force)
-                        {
-                            return 1;
-                        }
+                        args.Console.Out.WriteLine($"File \"{outputFile}\" already exists. Use \"--overwrite\" to allow existing files to be overwritten. Skipping.");
+                        result = 1;
+                        continue;
                     }
+
+                    BitmapFont.FromFile(sourceFile).Save(outputFile, args.Format);
                 }
-                else if (!args.Force)
+                catch (Exception exception)
                 {
-                    args.Console.Out.WriteLine($"Source file \"{sourceFile}\" was not found. Aborting.");
-                    return 1;
+                    args.Console.Out.WriteLine($"Failed to convert \"{sourceFile}\" due to an unhandled exception.");
+                    args.Console.Out.WriteLine("Please leave an issue at https://github.com/AuroraBertaOldham/FNTTools/issues.");
+                    args.Console.Out.WriteLine("Writing exception and aborting.");
+                    args.Console.Out.WriteLine(exception.ToString());
+                    result = 1;
+                    break;
                 }
             }
 
-            return 0;
+            return result;
         }
 
         private Command CreateInspectCommand()
@@ -126,8 +111,10 @@ namespace FNTTools
             var charactersOption = new Option<bool>("--characters", "Display the characters block.");
             var characterOption = new Option<int[]>(new []{ "--character", "-c" }, "Display a specific character from the characters block.");
             var kerningPairsOption = new Option<bool>("--kerningpairs", "Display the kerning pairs block.");
+            var kerningPairOption = new Option<int[]>(new[] { "--kerningpair", "-k" }, "Display a specific kerning pair from the kerning pairs block.");
 
             var inspectCommand = new Command("inspect", "Inspects the properties of a bitmap font.");
+
             inspectCommand.AddArgument(sourceArgument);
             inspectCommand.AddOption(allOption);
             inspectCommand.AddOption(infoOption);
@@ -137,6 +124,7 @@ namespace FNTTools
             inspectCommand.AddOption(charactersOption);
             inspectCommand.AddOption(characterOption);
             inspectCommand.AddOption(kerningPairsOption);
+            inspectCommand.AddOption(kerningPairOption);
 
             inspectCommand.Handler = CommandHandler.Create<InspectArgs>(Inspect);
 
@@ -147,7 +135,13 @@ namespace FNTTools
         {
             if (!File.Exists(args.Source))
             {
-                args.Console.Out.WriteLine($"Source file \"{args.Source}\" was not found. Aborting.\n");
+                args.Console.Out.WriteLine($"Source file \"{args.Source}\" does not exist. Aborting.");
+                return 1;
+            }
+
+            if (args.KerningPair != null && args.KerningPair.Length % 2 != 0)
+            {
+                args.Console.Out.WriteLine("Invalid number of arguments for -k/--kerningpair. A left and right value should be passed for each pair. Aborting.");
                 return 1;
             }
 
@@ -239,13 +233,35 @@ namespace FNTTools
             if (args.All || args.KerningPairs)
             {
                 args.Console.Out.WriteLine("Kerning Pairs Block:");
-                foreach (var (kerningPair, amount) in bitmapFont.KerningPairs)
+                if (bitmapFont.KerningPairs != null)
                 {
-                    InspectObject(kerningPair, args.Console);
-                    args.Console.Out.WriteLine($"Amount: {amount}");
-                    args.Console.Out.WriteLine();
+                    foreach (var (kerningPair, amount) in bitmapFont.KerningPairs)
+                    {
+                        InspectKerningPair(kerningPair, amount, args.Console);
+                    }
                 }
-                args.Console.Out.WriteLine();
+
+                if (args.KerningPair != null)
+                {
+                    for (var i = 0; i < args.KerningPair.Length; i += 2)
+                    {
+                        var kerningPair = new KerningPair(args.KerningPair[i], args.KerningPair[i + 1]);
+                        GetKerningPairAmountWithErrorMessage(kerningPair, bitmapFont, args.Console);
+                    }
+                }
+            }
+            else if (args.KerningPair != null && args.KerningPair.Length > 0)
+            {
+                args.Console.Out.WriteLine("Selected Kerning Pairs:");
+                for (var i = 0; i < args.KerningPair.Length; i += 2)
+                {
+                    var kerningPair = new KerningPair(args.KerningPair[i], args.KerningPair[i + 1]);
+                    var amount = GetKerningPairAmountWithErrorMessage(kerningPair, bitmapFont, args.Console);
+                    if (amount != null)
+                    {
+                        InspectKerningPair(kerningPair, amount.Value, args.Console);
+                    }
+                }
             }
 
             return 0;
@@ -263,7 +279,7 @@ namespace FNTTools
         private Character GetCharacterWithErrorMessage(int id, BitmapFont bitmapFont, IConsole console)
         {
             if (bitmapFont.Characters != null && bitmapFont.Characters.TryGetValue(id, out var character)) return character;
-            console.Out.WriteLine($"Character with the ID \"{id}\" does not exist. Skipping.");
+            console.Out.WriteLine($"Character with the ID \"{id}\" does not exist.");
             console.Out.WriteLine();
             return null;
         }
@@ -294,7 +310,7 @@ namespace FNTTools
         private string GetPageFileWithErrorMessage(int id, BitmapFont bitmapFont, IConsole console)
         {
             if (bitmapFont.Pages != null && bitmapFont.Pages.TryGetValue(id, out var file)) return file;
-            console.Out.WriteLine($"Page with the ID \"{id}\" does not exist. Skipping.");
+            console.Out.WriteLine($"Page with the ID \"{id}\" does not exist.");
             console.Out.WriteLine();
             return null;
         }
@@ -303,6 +319,21 @@ namespace FNTTools
         {
             console.Out.WriteLine($"ID: {id}");
             console.Out.WriteLine($"File: {file}");
+            console.Out.WriteLine();
+        }
+
+        private int? GetKerningPairAmountWithErrorMessage(KerningPair kerningPair, BitmapFont bitmapFont, IConsole console)
+        {
+            if (bitmapFont.KerningPairs != null && bitmapFont.KerningPairs.TryGetValue(kerningPair, out var amount)) return amount;
+            console.Out.WriteLine($"Kerning Pair with the first \"{kerningPair.First}\" and second \"{kerningPair.Second}\" does not exist.");
+            console.Out.WriteLine();
+            return null;
+        }
+
+        private void InspectKerningPair(KerningPair kerningPair, int amount, IConsole console)
+        {
+            InspectObject(kerningPair, console);
+            console.Out.WriteLine($"Amount: {amount}");
             console.Out.WriteLine();
         }
     }
@@ -314,8 +345,6 @@ namespace FNTTools
         public string[] Source { get; set; }
 
         public string[] Output { get; set; }
-
-        public bool Force { get; set; }
 
         public bool Overwrite { get; set; }
 
@@ -343,6 +372,8 @@ namespace FNTTools
         public int[] Character { get; set; }
 
         public bool KerningPairs { get; set; }
+
+        public int[] KerningPair { get; set; }
 
         public IConsole Console { get; set; }
 
