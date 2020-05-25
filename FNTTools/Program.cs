@@ -25,7 +25,7 @@ namespace FNTTools
 
         public int Run(string[] args)
         {
-            var root = new RootCommand("This program is a tool for working with Angel Code bitmap fonts (.fnt).")
+            var root = new RootCommand("This program is a tool for working with AngelCode bitmap fonts (.fnt).")
             {
                 CreateConvertCommand(),
                 CreateInspectCommand()
@@ -103,7 +103,7 @@ namespace FNTTools
         {
             var sourceArgument = new Argument<string>("source", "The bitmap font to inspect.");
 
-            var allOption = new Option<bool>("--all", "Displays all blocks. Not recommended for large fonts.");
+            var allOption = new Option<bool>("--all", "Display all blocks.");
             var infoOption = new Option<bool>("--info", "Display the info block.");
             var commonOption = new Option<bool>("--common", "Display the common block.");
             var pagesOption = new Option<bool>("--pages", "Display the pages block.");
@@ -325,7 +325,7 @@ namespace FNTTools
         private int? GetKerningPairAmountWithErrorMessage(KerningPair kerningPair, BitmapFont bitmapFont, IConsole console)
         {
             if (bitmapFont.KerningPairs != null && bitmapFont.KerningPairs.TryGetValue(kerningPair, out var amount)) return amount;
-            console.Out.WriteLine($"Kerning Pair with the first \"{kerningPair.First}\" and second \"{kerningPair.Second}\" does not exist.");
+            console.Out.WriteLine($"Kerning Pair with the first \"{kerningPair.First}\" and the second \"{kerningPair.Second}\" does not exist.");
             console.Out.WriteLine();
             return null;
         }
